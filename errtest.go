@@ -32,6 +32,13 @@ const (
 // testifyPath is the module whose message-matching assertions are banned.
 const testifyPath = "github.com/stretchr/testify"
 
+// mechanismPath is the package implementing the sentinel mechanism itself. Its
+// own tests MUST assert rendered message text — the rendering is the contract
+// under test there, and no amount of errors.Is matching can verify what an
+// error's Error() string says. It is exempt for the same reason it is the one
+// sanctioned fmt.Errorf call site in yze/errconst.
+const mechanismPath = "github.com/gomatic/go-error"
+
 // Analyzer reports error expectations in test files that bypass the
 // wantErr-error-plus-errors.Is shape.
 var Analyzer = &analysis.Analyzer{
@@ -51,6 +58,9 @@ var Registration = goyze.Registration{
 
 // run reports banned error-expectation shapes in the pass's test files.
 func run(pass *analysis.Pass) (any, error) {
+	if isMechanism(pass) {
+		return nil, nil
+	}
 	ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	types := []ast.Node{(*ast.StructType)(nil), (*ast.CallExpr)(nil)}
 	ins.Preorder(types, func(n ast.Node) {
@@ -65,6 +75,14 @@ func run(pass *analysis.Pass) (any, error) {
 		}
 	})
 	return nil, nil
+}
+
+// isMechanism reports whether the package under analysis is the sentinel
+// mechanism itself, whose message rendering is the contract its tests exist to
+// verify. The test variant of that package carries a `.test` suffix, so the
+// prefix comparison covers both.
+func isMechanism(pass *analysis.Pass) bool {
+	return pass.Pkg != nil && strings.HasPrefix(pass.Pkg.Path(), mechanismPath)
 }
 
 // isTestFile reports whether the node lives in a _test.go file.
