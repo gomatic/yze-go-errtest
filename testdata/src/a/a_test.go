@@ -110,3 +110,87 @@ func stringify(err error) string {
 	}
 	return "wrapped: " + err.Error()
 }
+
+// TestErrorTextRenderingContracts pins the two sanctioned rendering shapes:
+// pinning a SENTINEL CONSTANT's message text (the message is its declared
+// contract), and asserting rendered context on an error the same function
+// already discriminates with an Is-style matcher.
+func TestErrorTextRenderingContracts(t *testing.T) {
+	if ErrBoom.Error() != "boom" { // a sentinel's own text is its contract: sanctioned
+		t.Fatal("sentinel text")
+	}
+	if strings.Contains(ErrBoom.Error(), "oom") { // likewise through a matcher
+		t.Log("contains")
+	}
+	err := doWork()
+	assert.ErrorIs(t, err, ErrBoom)
+	if !strings.Contains(err.Error(), "boom") { // rendering asserted AFTER Is: sanctioned
+		t.Fatal("context rendering")
+	}
+}
+
+// pkgErr and pkgMatched exercise the package-scope shape: no enclosing
+// function means no Is-exemption is possible, and a non-identifier receiver
+// can carry no object to exempt.
+var (
+	pkgErr     = doWork()
+	pkgMatched = pkgErr.Error() == "boom" // want `never match on err.Error\(\) text`
+)
+
+// coder has an Error method whose ARITY disqualifies it as the error
+// interface's rendering.
+type coder struct{}
+
+// Error renders a specific code; the parameter means this is not error.Error.
+func (coder) Error(code int) string {
+	if code == 0 {
+		return ""
+	}
+	return "code"
+}
+
+// fake carries a zero-arg Error method whose return type keeps it OFF the
+// error interface.
+type fake struct{}
+
+// Error returns a count, not a message.
+func (fake) Error() int { return 0 }
+
+// TestErrorTextEdgeShapes pins the remaining discrimination shapes: a fresh
+// call result matched by text, a struct-field receiver, an Is-style match of
+// a DIFFERENT error (which exempts nothing), a closure-local exemption, and
+// an arity-mismatched Error method that is no rendering at all.
+func TestErrorTextEdgeShapes(t *testing.T) {
+	if doWork().Error() == "boom" { // want `never match on err.Error\(\) text`
+		t.Log("fresh result")
+	}
+
+	holder := struct{ err error }{err: doWork()}
+	if strings.Contains(holder.err.Error(), "boom") { // want `never match on err.Error\(\) text`
+		t.Log("field receiver")
+	}
+
+	err, other := doWork(), doWork()
+	assert.ErrorIs(t, other, ErrBoom)
+	if err.Error() == "boom" { // want `never match on err.Error\(\) text`
+		t.Log("a different error's Is exempts nothing")
+	}
+
+	func() {
+		inner := doWork()
+		if !errors.Is(inner, ErrBoom) {
+			t.Fatal("closure discriminates properly")
+		}
+		if strings.Contains(inner.Error(), "boom") { // exempt: Is-asserted in the SAME closure
+			t.Log("closure rendering")
+		}
+	}()
+
+	if (coder{}).Error(1) == "code" { // an arity-mismatched Error is not the error interface
+		t.Log("not a rendering")
+	}
+	if (fake{}).Error() == 0 { // a zero-arg Error returning non-string implements nothing
+		t.Log("not an error either")
+	}
+	_ = pkgMatched
+}

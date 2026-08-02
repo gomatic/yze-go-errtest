@@ -12,7 +12,6 @@ package errtest
 
 import (
 	"go/ast"
-	"go/token"
 	"go/types"
 	"strings"
 
@@ -65,18 +64,20 @@ func run(pass *analysis.Pass) (any, error) {
 	}
 	ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	types := []ast.Node{(*ast.StructType)(nil), (*ast.CallExpr)(nil), (*ast.BinaryExpr)(nil)}
-	ins.Preorder(types, func(n ast.Node) {
-		if !isTestFile(pass, n) {
-			return
+	ins.WithStack(types, func(n ast.Node, isPush bool, stack []ast.Node) bool {
+		if !isPush || !isTestFile(pass, n) {
+			return true
 		}
 		switch node := n.(type) {
 		case *ast.StructType:
 			checkFields(pass, node)
 		case *ast.CallExpr:
 			checkCall(pass, node)
+			checkErrTextArgs(pass, node, stack)
 		case *ast.BinaryExpr:
-			checkComparison(pass, node)
+			checkComparison(pass, node, stack)
 		}
+		return true
 	})
 	return nil, nil
 }
@@ -151,7 +152,6 @@ func isBasic(t types.Type, kind types.BasicKind) bool {
 // checkCall reports testify message-matching assertions (EqualError and
 // ErrorContains, function and method forms alike).
 func checkCall(pass *analysis.Pass, call *ast.CallExpr) {
-	checkErrTextArgs(pass, call)
 	sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
 	if !ok || !isMessageMatcher(assertionName(sel.Sel.Name)) {
 		return
@@ -159,66 +159,6 @@ func checkCall(pass *analysis.Pass, call *ast.CallExpr) {
 	if isTestifyFunc(pass.TypesInfo.ObjectOf(sel.Sel)) {
 		pass.Reportf(call.Pos(), "%s", messageMatch)
 	}
-}
-
-// stringMatchers are the strings-package predicates that turn an error's
-// rendered text into a match — the hand-rolled spelling of the same defect
-// EqualError/ErrorContains commit.
-var stringMatchers = map[string]bool{
-	"Contains": true, "HasPrefix": true, "HasSuffix": true, "EqualFold": true,
-}
-
-// checkErrTextArgs reports a strings-package matcher fed an error's rendered
-// text.
-func checkErrTextArgs(pass *analysis.Pass, call *ast.CallExpr) {
-	sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
-	if !ok || !stringMatchers[sel.Sel.Name] || !isStringsFunc(pass.TypesInfo.ObjectOf(sel.Sel)) {
-		return
-	}
-	for _, arg := range call.Args {
-		if isErrorText(pass, arg) {
-			pass.Reportf(call.Pos(), "%s", messageErrText)
-			return
-		}
-	}
-}
-
-// checkComparison reports an ==/!= comparison against an error's rendered text.
-func checkComparison(pass *analysis.Pass, cmp *ast.BinaryExpr) {
-	if cmp.Op != token.EQL && cmp.Op != token.NEQ {
-		return
-	}
-	if isErrorText(pass, cmp.X) || isErrorText(pass, cmp.Y) {
-		pass.Reportf(cmp.Pos(), "%s", messageErrText)
-	}
-}
-
-// isErrorText reports whether expr is a call of the error interface's Error
-// method — an error's message rendered for matching.
-func isErrorText(pass *analysis.Pass, expr ast.Expr) bool {
-	call, ok := ast.Unparen(expr).(*ast.CallExpr)
-	if !ok {
-		return false
-	}
-	sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != "Error" || len(call.Args) != 0 {
-		return false
-	}
-	recv := pass.TypesInfo.TypeOf(sel.X)
-	return recv != nil && types.Implements(recv, errorInterface())
-}
-
-// errorInterface is the built-in error interface type.
-func errorInterface() *types.Interface {
-	iface, _ := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
-	return iface
-}
-
-// isStringsFunc reports whether obj is a function declared by the standard
-// strings package.
-func isStringsFunc(obj types.Object) bool {
-	fn, ok := obj.(*types.Func)
-	return ok && fn.Pkg() != nil && fn.Pkg().Path() == "strings"
 }
 
 // isTestifyFunc reports whether obj is a function or method declared by the
