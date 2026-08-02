@@ -2,6 +2,7 @@ package a
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	errs "github.com/gomatic/go-error"
@@ -77,4 +78,35 @@ func TestStringMatching(t *testing.T) {
 	want.EqualError(err, "boom")   // want `match errors with errors.Is, never message strings`
 	want.ErrorContains(err, "boo") // want `match errors with errors.Is, never message strings`
 	want.ErrorIs(err, ErrBoom)     // sanctioned
+}
+
+// TestErrorTextMatching pins the hand-rolled spelling of message matching:
+// err.Error() fed to a strings matcher or compared against a literal. Printing
+// the text in a failure message stays sanctioned — rendering is not matching.
+func TestErrorTextMatching(t *testing.T) {
+	err := doWork()
+	if strings.Contains(err.Error(), "boom") { // want `never match on err.Error\(\) text`
+		t.Log("matched")
+	}
+	if strings.HasPrefix(err.Error(), "b") { // want `never match on err.Error\(\) text`
+		t.Log("matched")
+	}
+	if err.Error() == "boom" { // want `never match on err.Error\(\) text`
+		t.Log("matched")
+	}
+	if "boom" != err.Error() { // want `never match on err.Error\(\) text`
+		t.Log("matched")
+	}
+	t.Log(err.Error())                        // rendering, not matching: sanctioned
+	_ = strings.Contains("boom", "oo")        // strings matcher without error text: sanctioned
+	_ = stringify(err) == "boom"              // a non-Error method rendering is out of scope
+	_ = strings.Contains(stringify(err), "x") // likewise as a matcher argument
+}
+
+// stringify renders an error through something other than Error().
+func stringify(err error) string {
+	if err == nil {
+		return ""
+	}
+	return "wrapped: " + err.Error()
 }
