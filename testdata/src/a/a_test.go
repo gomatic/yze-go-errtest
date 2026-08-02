@@ -194,3 +194,16 @@ func TestErrorTextEdgeShapes(t *testing.T) {
 	}
 	_ = pkgMatched
 }
+
+// TestSentinelTableRendering pins the table-driven sentinel-message contract:
+// a field TYPED by the mechanism renders each constant's declared text.
+func TestSentinelTableRendering(t *testing.T) {
+	for _, tc := range []struct {
+		sentinel errs.Const
+		message  string
+	}{{sentinel: ErrBoom, message: "boom"}} {
+		if tc.sentinel.Error() != tc.message { // mechanism-typed rendering: sanctioned
+			t.Errorf("sentinel %q: want %q", tc.sentinel.Error(), tc.message)
+		}
+	}
+}

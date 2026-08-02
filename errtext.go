@@ -9,6 +9,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"strings"
 
 	"golang.org/x/tools/go/analysis"
 )
@@ -78,12 +79,25 @@ func errorTextReceiver(pass *analysis.Pass, expr ast.Expr) (ast.Expr, bool) {
 	return sel.X, true
 }
 
-// isSentinelConst reports whether the receiver directly references a declared
-// constant — a sentinel whose rendered message is its own contract.
+// isSentinelConst reports whether the receiver is a sentinel whose rendered
+// message is its own declared contract: a directly referenced constant, or any
+// expression TYPED by the sentinel mechanism (a table field of errs.Const
+// pinning each sentinel's message is the same contract, table-driven).
 func isSentinelConst(pass *analysis.Pass, receiver ast.Expr) bool {
-	obj := referencedObject(pass, receiver)
-	_, isConst := obj.(*types.Const)
-	return isConst
+	if _, isConst := referencedObject(pass, receiver).(*types.Const); isConst {
+		return true
+	}
+	return isMechanismType(pass.TypesInfo.TypeOf(receiver))
+}
+
+// isMechanismType reports whether t is declared by the sentinel mechanism
+// package.
+func isMechanismType(t types.Type) bool {
+	named, ok := types.Unalias(t).(*types.Named)
+	if !ok || named.Obj().Pkg() == nil {
+		return false
+	}
+	return strings.HasPrefix(named.Obj().Pkg().Path(), mechanismPath)
 }
 
 // isAssertedInFunc reports whether the innermost enclosing function also
