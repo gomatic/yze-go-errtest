@@ -25,6 +25,24 @@ func TestConcreteErrorTypeGuards(t *testing.T) {
 	want.False(isConcreteErrorType(types.Universe.Lookup("error").Type()))
 }
 
+// TestMechanismPathBoundary pins the exemption's boundary in both directions:
+// the mechanism module, its subpackages, and its test variants (the external
+// test package and the synthesized test main) are exempt; a path that merely
+// prefix-extends the mechanism's — a sibling module or a fork — is not.
+func TestMechanismPathBoundary(t *testing.T) {
+	t.Parallel()
+	want := assert.New(t)
+
+	want.True(isMechanismPath("github.com/gomatic/go-error"))
+	want.True(isMechanismPath("github.com/gomatic/go-error/sub"))
+	want.True(isMechanismPath("github.com/gomatic/go-error_test"))
+	want.True(isMechanismPath("github.com/gomatic/go-error.test"))
+
+	want.False(isMechanismPath("github.com/gomatic/go-error-extra"))
+	want.False(isMechanismPath("github.com/gomatic/go-errors"))
+	want.False(isMechanismPath("example.com/other"))
+}
+
 // TestBasicKindGuards pins isBasic's nil guard and non-basic rejection.
 func TestBasicKindGuards(t *testing.T) {
 	t.Parallel()

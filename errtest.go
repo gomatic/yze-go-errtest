@@ -84,10 +84,26 @@ func run(pass *analysis.Pass) (any, error) {
 
 // isMechanism reports whether the package under analysis is the sentinel
 // mechanism itself, whose message rendering is the contract its tests exist to
-// verify. The test variant of that package carries a `.test` suffix, so the
-// prefix comparison covers both.
+// verify.
 func isMechanism(pass *analysis.Pass) bool {
-	return pass.Pkg != nil && strings.HasPrefix(pass.Pkg.Path(), mechanismPath)
+	return pass.Pkg != nil && isMechanismPath(packagePath(pass.Pkg.Path()))
+}
+
+// packagePath is the import path of the package under analysis.
+type packagePath string
+
+// isMechanismPath reports whether path is the mechanism module at a path
+// BOUNDARY: the module itself, one of its subpackages ("/"), or one of its
+// test variants — the external test package ("_test") and the synthesized
+// test main (".test"). A bare prefix comparison is NOT enough: it would let
+// any module prefix-extending the path (github.com/gomatic/go-error-extra, a
+// go-errors fork, …) escape the entire analyzer.
+func isMechanismPath(path packagePath) bool {
+	switch path {
+	case mechanismPath, mechanismPath + "_test", mechanismPath + ".test":
+		return true
+	}
+	return strings.HasPrefix(string(path), mechanismPath+"/")
 }
 
 // isTestFile reports whether the node lives in a _test.go file.
