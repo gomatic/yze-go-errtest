@@ -51,6 +51,16 @@ func TestRegistrationIsWellFormed(t *testing.T) {
 // defects and both are pinned here: package forgeline's real test file claims a
 // source name and is judged anyway, while its ordinary source file claims a test
 // name and is left alone anyway.
+//
+// The rest of the package sits on the matcher's literal, because the identity
+// is only as good as the comparison that reads it and every widening below
+// survived this suite before its fixture existed. Kit's name contains "_test"
+// and does not end in "_test.go"; Helper's ends in "test.go" with no underscore
+// — the left edge, and the shape of this repository's own errtest.go; Golden's
+// contains "_test.go" without ending in it; Cased's differs from "_test.go"
+// only in letter case. All four are in GoFiles, so all four carry the banned
+// bool expectation and none is reported, and each kills one widening that would
+// point an error-testing rule at production source.
 func TestADirectiveDoesNotRenameAFile(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), errtest.Analyzer, "forgeline")
 }
