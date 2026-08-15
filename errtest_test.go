@@ -39,3 +39,18 @@ func TestRegistrationIsWellFormed(t *testing.T) {
 	assert.Equal(t, "yze/errtest", errtest.Registration.RuleID())
 	assert.Same(t, errtest.Analyzer, errtest.Registration.Analyzer)
 }
+
+// TestADirectiveDoesNotRenameAFile pins the test-file scope to the name the
+// FileSet holds, which the judged file cannot rewrite. A `//line` directive is a
+// compiler feature for generated code: it changes what fset.Position reports and
+// nothing else — the go tool still compiles the file, go list still names it in
+// GoFiles or TestGoFiles, and `go test` still runs it. So a scope resolved
+// through Position is decided by the very file being judged.
+//
+// This analyzer's matcher INCLUDES rather than exempts, so both directions are
+// defects and both are pinned here: package forgeline's real test file claims a
+// source name and is judged anyway, while its ordinary source file claims a test
+// name and is left alone anyway.
+func TestADirectiveDoesNotRenameAFile(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), errtest.Analyzer, "forgeline")
+}

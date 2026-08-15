@@ -107,8 +107,14 @@ func isMechanismPath(path packagePath) bool {
 }
 
 // isTestFile reports whether the node lives in a _test.go file.
+//
+// The name comes from the FileSet's own entry, never from a Position: Position
+// applies //line directives, so a file could rename itself into or out of this
+// analyzer's scope with one comment line while the go tool went on compiling
+// and running it unchanged. A decision ABOUT a file must read something that
+// file cannot rewrite.
 func isTestFile(pass *analysis.Pass, n ast.Node) bool {
-	return strings.HasSuffix(pass.Fset.Position(n.Pos()).Filename, "_test.go")
+	return strings.HasSuffix(pass.Fset.File(n.Pos()).Name(), "_test.go")
 }
 
 // checkFields reports each expectation-named struct field whose type bypasses
